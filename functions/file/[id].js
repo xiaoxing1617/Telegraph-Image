@@ -33,19 +33,21 @@ export async function onRequest(context) {
     // If the response is OK, proceed with further checks
     if (!response.ok) return response;
 
+    const inlineResponse = makeInlineFileResponse(response, params.id);
+
     // Log response details
     console.log(response.ok, response.status);
 
     // Allow the admin page to directly view the image
     const isAdmin = request.headers.get('Referer')?.includes(`${url.origin}/admin`);
     if (isAdmin) {
-        return response;
+        return inlineResponse;
     }
 
     // Check if KV storage is available
     if (!env.img_url) {
         console.log("KV storage not available, returning image directly");
-        return response;  // Directly return image response, terminate execution
+        return inlineResponse;  // Directly return file response, terminate execution
     }
 
     // The following code executes only if KV is available
@@ -77,7 +79,7 @@ export async function onRequest(context) {
 
     // Handle based on ListType and Label
     if (metadata.ListType === "White") {
-        return response;
+        return inlineResponse;
     } else if (metadata.ListType === "Block" || metadata.Label === "adult") {
         const referer = request.headers.get('Referer');
         const redirectUrl = referer ? "https://static-res.pages.dev/teleimage/img-block-compressed.png" : `${url.origin}/block-img.html`;
@@ -124,7 +126,57 @@ export async function onRequest(context) {
     await env.img_url.put(params.id, "", { metadata });
 
     // Return file content
-    return response;
+    return inlineResponse;
+}
+
+function makeInlineFileResponse(response, fileName) {
+    const headers = new Headers(response.headers);
+    const contentType = getContentType(fileName);
+
+    if (contentType) {
+        headers.set("Content-Type", contentType);
+    }
+
+    headers.set("Content-Disposition", `inline; filename="${sanitizeFileName(fileName)}"`);
+    headers.set("X-Content-Type-Options", "nosniff");
+
+    return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+    });
+}
+
+function getContentType(fileName) {
+    const extension = fileName.split(".").pop().toLowerCase();
+    const contentTypes = {
+        apng: "image/apng",
+        avif: "image/avif",
+        gif: "image/gif",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        svg: "image/svg+xml",
+        webp: "image/webp",
+        bmp: "image/bmp",
+        ico: "image/x-icon",
+        mp4: "video/mp4",
+        m4v: "video/mp4",
+        webm: "video/webm",
+        ogv: "video/ogg",
+        mov: "video/quicktime",
+        mp3: "audio/mpeg",
+        m4a: "audio/mp4",
+        wav: "audio/wav",
+        ogg: "audio/ogg",
+        pdf: "application/pdf",
+    };
+
+    return contentTypes[extension];
+}
+
+function sanitizeFileName(fileName) {
+    return fileName.replace(/["\\\r\n]/g, "_");
 }
 
 async function getFilePath(env, file_id) {
