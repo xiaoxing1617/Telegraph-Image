@@ -1,4 +1,3 @@
-
 # Telegraph-Image
 
 Free Image Hosting solution, Flickr/imgur alternative. Using Cloudflare Pages and the Telegram Bot API (Telegram Channel).
